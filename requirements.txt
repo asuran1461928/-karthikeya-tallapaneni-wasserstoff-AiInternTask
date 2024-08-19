@@ -1,10 +1,10 @@
 torch
-opencv-python
-pillow
+opencv-python-headless
+Pillow
+numpy
 pandas
 pytesseract
-torchvision
 transformers
 yolov5
-numpy
 streamlit
+tqdm
