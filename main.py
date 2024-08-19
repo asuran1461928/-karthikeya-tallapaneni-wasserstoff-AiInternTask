@@ -10,8 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
 import tempfile
-import streamlit as st
 from yolov5 import YOLOv5
+import streamlit as st
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -65,19 +65,19 @@ def extract_objects(boxes, image):
                 logging.warning(f"Skipping invalid box with data: {box}")
                 continue
 
+            # Unpack bounding box and detection data
             x1, y1, x2, y2, conf, class_id = box[:6]
             x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])  # Convert to integers
 
+            # Extract object image
             object_image = np.array(image)[y1:y2, x1:x2]
             object_image_pil = Image.fromarray(object_image)
-
-            # Save to a temporary file
-            temp_filename = tempfile.mktemp(suffix=".png")
-            object_image_pil.save(temp_filename)
+            filename = f"object_{i}.png"
+            object_image_pil.save(filename)
 
             objects.append({
                 'object_id': i,
-                'filename': temp_filename,
+                'filename': filename,
                 'bounding_box': (x1, y1, x2, y2),
                 'confidence': conf,
                 'class_id': class_id
@@ -150,13 +150,16 @@ def summarize_attributes(objects, descriptions, text_data):
 
     return summary
 
-# Function to generate output image and CSV summary
-def generate_output(image_path, summary):
+# Function to generate output image and CSV summaries
+def generate_output(image_path, summary, objects):
+    # Open and process the image
     image = Image.open(image_path)
     draw = ImageDraw.Draw(image)
 
+    # Define colors for bounding boxes
     colors = ["red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta", "lime", "pink"]
 
+    # Try to load custom font
     font_size = 20
     try:
         font = ImageFont.truetype("arialbd.ttf", font_size)
@@ -164,21 +167,30 @@ def generate_output(image_path, summary):
         font = ImageFont.load_default()
         logging.warning("Custom font 'arialbd.ttf' not found. Using default font.")
 
+    # Draw bounding boxes and captions on the image
     for obj in summary:
         x1, y1, x2, y2 = obj['bounding_box']
         color = colors[obj['object_id'] % len(colors)]
         draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
         draw.text((x1, y1 - font_size - 5), obj['description'], fill=color, font=font)
 
+    # Save the annotated image
     output_image_path = tempfile.mktemp(suffix=".png")
     image.save(output_image_path)
 
-    df = pd.DataFrame(summary)
+    # Create DataFrame for summary
+    df_summary = pd.DataFrame(summary)
     output_csv_path = tempfile.mktemp(suffix=".csv")
-    df.to_csv(output_csv_path, index=False)
-    logging.info(f"Output saved as '{output_image_path}' and '{output_csv_path}'.")
+    df_summary.to_csv(output_csv_path, index=False)
+    
+    # Create DataFrame for objects
+    df_objects = pd.DataFrame(objects)
+    objects_csv_path = tempfile.mktemp(suffix=".csv")
+    df_objects.to_csv(objects_csv_path, index=False)
 
-    return output_image_path, output_csv_path
+    logging.info(f"Output saved as '{output_image_path}', '{output_csv_path}', and '{objects_csv_path}'.")
+
+    return output_image_path, output_csv_path, objects_csv_path
 
 # Function to execute the full pipeline with parallel processing
 def run_pipeline(image_path):
@@ -196,12 +208,12 @@ def run_pipeline(image_path):
             text_data = text_data_future.result()
 
         summary = summarize_attributes(objects, descriptions, text_data)
-        output_image_path, output_csv_path = generate_output(image_path, summary)
+        output_image_path, output_csv_path, objects_csv_path = generate_output(image_path, summary, objects)
         logging.info("Pipeline completed successfully.")
-        return output_image_path, output_csv_path
+        return output_image_path, output_csv_path, objects_csv_path
     except Exception as e:
         logging.error(f"Pipeline failed: {e}")
-        return None, None
+        return None, None, None
 
 # Streamlit app integration
 def main():
@@ -220,21 +232,34 @@ def main():
             image.save(temp_image_path)
 
         # Run the AI pipeline on the uploaded image
-        output_image_path, output_csv_path = run_pipeline(temp_image_path)
+        output_image_path, output_csv_path, objects_csv_path = run_pipeline(temp_image_path)
 
         # Display the results
-        if output_image_path and output_csv_path:
+        if output_image_path and output_csv_path and objects_csv_path:
             st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
             summary_df = pd.read_csv(output_csv_path)
             st.write("Summary of Detected Objects:")
             st.dataframe(summary_df)
 
+            objects_df = pd.read_csv(objects_csv_path)
+            st.write("Extracted Objects:")
+            st.dataframe(objects_df)
+
+            # Download buttons for CSV files
             with open(output_csv_path, "rb") as file:
                 st.download_button(
                     label="Download Summary CSV",
                     data=file,
                     file_name="summary.csv",
+                    mime="text/csv"
+                )
+            
+            with open(objects_csv_path, "rb") as file:
+                st.download_button(
+                    label="Download Extracted Objects CSV",
+                    data=file,
+                    file_name="object_id.csv",
                     mime="text/csv"
                 )
         else:
