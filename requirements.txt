@@ -1,10 +1,9 @@
+streamlit
 torch
-opencv-python
+transformers
+opencv-python-headless
 numpy
 Pillow
 pytesseract
-transformers
-yolov5
-streamlit
-pandas
+sqlite3
 opencv-python-headless==4.8.0.74
