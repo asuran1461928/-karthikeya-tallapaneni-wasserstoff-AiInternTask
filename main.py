@@ -1,13 +1,17 @@
-from ultralytics import YOLO
 import torch
+import cv2
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-import tempfile
-import logging
-import os
+import pandas as pd
 import pytesseract
-import streamlit as st
+from torchvision import transforms
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor
+import logging
+import os
+import tempfile
+import streamlit as st
+from yolov5 import YOLOv5
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -15,17 +19,9 @@ logging.basicConfig(level=logging.INFO)
 # Set the path to the installed Tesseract-OCR executable
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Initialize YOLOv5 model using ultralytics
-def load_yolov5_model(model_name='yolov5s'):
-    try:
-        model = YOLO(model_name)  # Use ultralytics YOLO
-        logging.info(f"YOLOv5 model '{model_name}' loaded successfully.")
-        return model
-    except Exception as e:
-        logging.error(f"Failed to load YOLOv5 model: {e}")
-        return None
-
-yolov5_model = load_yolov5_model()
+# Initialize YOLOv5 model
+model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
+yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
 
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -51,8 +47,8 @@ def segment_image(image_path):
         raise FileNotFoundError(f"Image file does not exist: {image_path}")
     try:
         image = Image.open(image_path).convert("RGB")
-        results = yolov5_model(image)  # Perform inference
-        boxes = results.pandas().xyxy[0].to_numpy()  # Extract boxes
+        results = yolov5_model.predict(image, size=640)  # Perform inference
+        boxes = results.xyxy[0].numpy()  # Extract boxes
 
         logging.info(f"Segmentation completed: {len(boxes)} boxes detected.")
         return boxes, image
@@ -118,11 +114,9 @@ def extract_text_from_objects(objects):
     text_data = []
     for obj in objects:
         try:
-            # Use PIL to open the image file
-            image = Image.open(obj['filename'])
-            # Convert image to grayscale for better OCR results (optional)
-            image = image.convert('L')
-            # Perform OCR with pytesseract
+            image = cv2.imread(obj['filename'])
+            if image is None:
+                raise ValueError(f"Image file not readable: {obj['filename']}")
             text = pytesseract.image_to_string(image)
             text_data.append({
                 'object_id': obj['object_id'],
@@ -151,13 +145,12 @@ def summarize_attributes(objects, descriptions, text_data):
             'confidence': obj['confidence'],
             'class_id': obj['class_id'],
             'description': description,
-            'text': text,
-            'filename': obj['filename']
+            'text': text
         })
 
     return summary
 
-# Function to generate output image and display results
+# Function to generate output image and CSV summary
 def generate_output(image_path, summary):
     image = Image.open(image_path)
     draw = ImageDraw.Draw(image)
@@ -169,65 +162,83 @@ def generate_output(image_path, summary):
         font = ImageFont.truetype("arialbd.ttf", font_size)
     except IOError:
         font = ImageFont.load_default()
-        logging.warning("Arial Bold font not found, using default font.")
+        logging.warning("Custom font 'arialbd.ttf' not found. Using default font.")
 
     for obj in summary:
         x1, y1, x2, y2 = obj['bounding_box']
         color = colors[obj['object_id'] % len(colors)]
         draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
-        text = f"ID:{obj['object_id']} Conf:{obj['confidence']:.2f} Cls:{obj['class_id']}"
-        draw.text((x1, y1 - font_size), text, fill=color, font=font)
+        draw.text((x1, y1 - font_size - 5), obj['description'], fill=color, font=font)
 
-    temp_image_path = tempfile.mktemp(suffix=".jpg")
-    image.save(temp_image_path)
-    return temp_image_path
+    output_image_path = tempfile.mktemp(suffix=".png")
+    image.save(output_image_path)
 
-# Main function for Streamlit app
+    df = pd.DataFrame(summary)
+    output_csv_path = tempfile.mktemp(suffix=".csv")
+    df.to_csv(output_csv_path, index=False)
+    logging.info(f"Output saved as '{output_image_path}' and '{output_csv_path}'.")
+
+    return output_image_path, output_csv_path
+
+# Function to execute the full pipeline with parallel processing
+def run_pipeline(image_path):
+    try:
+        boxes, image = segment_image(image_path)
+
+        with ThreadPoolExecutor() as executor:
+            objects_future = executor.submit(extract_objects, boxes, image)
+            objects = objects_future.result()
+
+            descriptions_future = executor.submit(identify_objects, objects)
+            text_data_future = executor.submit(extract_text_from_objects, objects)
+
+            descriptions = descriptions_future.result()
+            text_data = text_data_future.result()
+
+        summary = summarize_attributes(objects, descriptions, text_data)
+        output_image_path, output_csv_path = generate_output(image_path, summary)
+        logging.info("Pipeline completed successfully.")
+        return output_image_path, output_csv_path
+    except Exception as e:
+        logging.error(f"Pipeline failed: {e}")
+        return None, None
+
+# Streamlit app integration
 def main():
-    st.title("Image Analysis App")
+    st.title("AI Pipeline for Image Segmentation, Object Identification, and Text Extraction")
+
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         st.image(image, caption='Uploaded Image', use_column_width=True)
+        st.write("Running the pipeline...")
 
-        temp_dir = "temp_images"
-        os.makedirs(temp_dir, exist_ok=True)
-        image_path = os.path.join(temp_dir, uploaded_file.name)
-        image.save(image_path)
+        # Save the uploaded image to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+            temp_image_path = temp_file.name
+            image.save(temp_image_path)
 
-        try:
-            # Segment image
-            boxes, image = segment_image(image_path)
+        # Run the AI pipeline on the uploaded image
+        output_image_path, output_csv_path = run_pipeline(temp_image_path)
 
-            # Extract objects and their details
-            objects = extract_objects(boxes, image)
-            descriptions = identify_objects(objects)
-            text_data = extract_text_from_objects(objects)
+        # Display the results
+        if output_image_path and output_csv_path:
+            st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            # Summarize attributes
-            summary = summarize_attributes(objects, descriptions, text_data)
+            summary_df = pd.read_csv(output_csv_path)
+            st.write("Summary of Detected Objects:")
+            st.dataframe(summary_df)
 
-            # Generate output image with annotations
-            output_image_path = generate_output(image_path, summary)
-
-            # Display results
-            st.subheader("Object Details")
-            for obj in summary:
-                st.write(f"**Object ID**: {obj['object_id']}")
-                st.write(f"**Bounding Box**: {obj['bounding_box']}")
-                st.write(f"**Confidence**: {obj['confidence']:.2f}")
-                st.write(f"**Class ID**: {obj['class_id']}")
-                st.write(f"**Description**: {obj['description']}")
-                st.write(f"**Text**: {obj['text']}")
-                st.image(obj['filename'], caption=f"Object {obj['object_id']} Image", use_column_width=True)
-                st.write("---")
-
-            st.subheader("Annotated Image")
-            st.image(output_image_path, caption='Annotated Image', use_column_width=True)
-
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+            with open(output_csv_path, "rb") as file:
+                st.download_button(
+                    label="Download Summary CSV",
+                    data=file,
+                    file_name="summary.csv",
+                    mime="text/csv"
+                )
+        else:
+            st.write("Error: Output files not found.")
 
 if __name__ == "__main__":
     main()
