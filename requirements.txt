@@ -6,4 +6,4 @@ transformers
 yolov5
 streamlit
 pandas
-opencv-python-headless
+opencv-python
