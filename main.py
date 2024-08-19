@@ -49,7 +49,7 @@ def segment_image(image_path):
     try:
         image = Image.open(image_path).convert("RGB")
         results = yolov5_model.predict(image, size=640)  # Perform inference
-        boxes = results.xyxy[0].numpy()  # Extract boxes
+        boxes = results.xyxy[0]  # Extract boxes (assuming results.xyxy is a list of NumPy arrays)
 
         logging.info(f"Segmentation completed: {len(boxes)} boxes detected.")
         return boxes, image
