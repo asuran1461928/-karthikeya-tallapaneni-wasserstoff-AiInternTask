@@ -76,6 +76,7 @@ def extract_objects(boxes, image):
             object_image_pil.save(temp_filename)
 
             objects.append({
+                'object_id': i,
                 'filename': temp_filename,
                 'bounding_box': (x1, y1, x2, y2),
                 'confidence': conf,
@@ -95,14 +96,14 @@ def identify_objects(objects):
             image = Image.open(obj['filename'])
             caption = generate_caption(image)
             descriptions.append({
-                'filename': obj['filename'],
+                'object_id': obj['object_id'],
                 'description': caption
             })
-            logging.info(f"Caption generated for object: {caption}")
+            logging.info(f"Caption generated for object {obj['object_id']}: {caption}")
         except Exception as e:
-            logging.error(f"Error in captioning object: {e}")
+            logging.error(f"Error in captioning object {obj['object_id']}: {e}")
             descriptions.append({
-                'filename': obj['filename'],
+                'object_id': obj['object_id'],
                 'description': "Captioning failed"
             })
 
@@ -118,14 +119,14 @@ def extract_text_from_objects(objects):
                 raise ValueError(f"Image file not readable: {obj['filename']}")
             text = pytesseract.image_to_string(image)
             text_data.append({
-                'filename': obj['filename'],
+                'object_id': obj['object_id'],
                 'text': text
             })
-            logging.info(f"Text extracted from object: {text}")
+            logging.info(f"Text extracted for object {obj['object_id']}: {text}")
         except Exception as e:
-            logging.error(f"Error extracting text from object: {e}")
+            logging.error(f"Error extracting text from object {obj['object_id']}: {e}")
             text_data.append({
-                'filename': obj['filename'],
+                'object_id': obj['object_id'],
                 'text': "OCR failed"
             })
 
@@ -135,15 +136,16 @@ def extract_text_from_objects(objects):
 def summarize_attributes(objects, descriptions, text_data):
     summary = []
     for obj in objects:
-        description = next((item['description'] for item in descriptions if item['filename'] == obj['filename']), None)
-        text = next((item['text'] for item in text_data if item['filename'] == obj['filename']), None)
+        description = next((item['description'] for item in descriptions if item['object_id'] == obj['object_id']), None)
+        text = next((item['text'] for item in text_data if item['object_id'] == obj['object_id']), None)
 
         summary.append({
-            'extracted_object': description or "No description",
+            'object_id': obj['object_id'],
             'bounding_box': obj['bounding_box'],
             'confidence': obj['confidence'],
             'class_id': obj['class_id'],
-            'text': text or "No text"
+            'description': description,
+            'text': text
         })
 
     return summary
@@ -164,9 +166,9 @@ def generate_output(image_path, summary):
 
     for obj in summary:
         x1, y1, x2, y2 = obj['bounding_box']
-        color = colors[obj['extracted_object'][:10].lower().count(' ') % len(colors)]
+        color = colors[obj['object_id'] % len(colors)]
         draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
-        draw.text((x1, y1 - font_size - 5), obj['extracted_object'], fill=color, font=font)
+        draw.text((x1, y1 - font_size - 5), obj['description'], fill=color, font=font)
 
     output_image_path = tempfile.mktemp(suffix=".png")
     image.save(output_image_path)
