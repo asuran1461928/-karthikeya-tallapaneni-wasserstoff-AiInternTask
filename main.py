@@ -1,3 +1,4 @@
+from ultralytics import YOLO
 import torch
 from PIL import Image, ImageDraw, ImageFont
 import tempfile
@@ -14,10 +15,10 @@ logging.basicConfig(level=logging.INFO)
 # Set the path to the installed Tesseract-OCR executable
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Initialize YOLOv5 model using Ultralytics Hub
+# Initialize YOLOv5 model using ultralytics
 def load_yolov5_model(model_name='yolov5s'):
     try:
-        model = torch.hub.load('ultralytics/yolov5', model_name)
+        model = YOLO(model_name)  # Use ultralytics YOLO
         logging.info(f"YOLOv5 model '{model_name}' loaded successfully.")
         return model
     except Exception as e:
@@ -51,7 +52,7 @@ def segment_image(image_path):
     try:
         image = Image.open(image_path).convert("RGB")
         results = yolov5_model(image)  # Perform inference
-        boxes = results.xyxy[0].cpu().numpy()  # Extract boxes
+        boxes = results.pandas().xyxy[0].to_numpy()  # Extract boxes
 
         logging.info(f"Segmentation completed: {len(boxes)} boxes detected.")
         return boxes, image
@@ -168,45 +169,20 @@ def generate_output(image_path, summary):
         font = ImageFont.truetype("arialbd.ttf", font_size)
     except IOError:
         font = ImageFont.load_default()
-        logging.warning("Custom font 'arialbd.ttf' not found. Using default font.")
+        logging.warning("Arial Bold font not found, using default font.")
 
     for obj in summary:
         x1, y1, x2, y2 = obj['bounding_box']
         color = colors[obj['object_id'] % len(colors)]
         draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
-        draw.text((x1, y1 - font_size - 5), obj['description'], fill=color, font=font)
+        text = f"ID:{obj['object_id']} Conf:{obj['confidence']:.2f} Cls:{obj['class_id']}"
+        draw.text((x1, y1 - font_size), text, fill=color, font=font)
 
-    output_image_path = tempfile.mktemp(suffix=".png")
-    image.save(output_image_path)
+    temp_image_path = tempfile.mktemp(suffix=".jpg")
+    image.save(temp_image_path)
+    return temp_image_path
 
-    logging.info(f"Output image saved as '{output_image_path}'.")
-
-    return output_image_path
-
-# Function to execute the full pipeline with parallel processing
-def run_pipeline(image_path):
-    try:
-        boxes, image = segment_image(image_path)
-
-        with ThreadPoolExecutor() as executor:
-            objects_future = executor.submit(extract_objects, boxes, image)
-            objects = objects_future.result()
-
-            descriptions_future = executor.submit(identify_objects, objects)
-            text_data_future = executor.submit(extract_text_from_objects, objects)
-
-            descriptions = descriptions_future.result()
-            text_data = text_data_future.result()
-
-        summary = summarize_attributes(objects, descriptions, text_data)
-        output_image_path = generate_output(image_path, summary)
-        logging.info("Pipeline completed successfully.")
-        return output_image_path, summary
-    except Exception as e:
-        logging.error(f"Pipeline failed: {e}")
-        return None, None
-
-# Streamlit app integration
+# Main function for Streamlit app
 def main():
     st.title("Image Analysis App")
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
@@ -220,14 +196,22 @@ def main():
         image_path = os.path.join(temp_dir, uploaded_file.name)
         image.save(image_path)
 
-        # Run the AI pipeline on the uploaded image
-        output_image_path, summary = run_pipeline(image_path)
+        try:
+            # Segment image
+            boxes, image = segment_image(image_path)
 
-        # Display the results
-        if output_image_path:
-            st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
+            # Extract objects and their details
+            objects = extract_objects(boxes, image)
+            descriptions = identify_objects(objects)
+            text_data = extract_text_from_objects(objects)
 
-            # Display detailed information
+            # Summarize attributes
+            summary = summarize_attributes(objects, descriptions, text_data)
+
+            # Generate output image with annotations
+            output_image_path = generate_output(image_path, summary)
+
+            # Display results
             st.subheader("Object Details")
             for obj in summary:
                 st.write(f"**Object ID**: {obj['object_id']}")
@@ -238,8 +222,12 @@ def main():
                 st.write(f"**Text**: {obj['text']}")
                 st.image(obj['filename'], caption=f"Object {obj['object_id']} Image", use_column_width=True)
                 st.write("---")
-        else:
-            st.write("Error: Output files not found.")
+
+            st.subheader("Annotated Image")
+            st.image(output_image_path, caption='Annotated Image', use_column_width=True)
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
 if __name__ == "__main__":
     main()
