@@ -194,6 +194,15 @@ def save_to_database(db_path, summary):
     conn.commit()
     conn.close()
 
+# Function to retrieve data from SQLite database
+def retrieve_data(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM objects')
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
 # Function to generate output image and save data to SQLite database
 def generate_output(image_path, summary, db_path):
     image = Image.open(image_path)
@@ -274,10 +283,13 @@ def main():
         if output_image_path:
             st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            # Optionally provide a way to download or view the database
-            st.write("Data stored in SQLite database.")
-            st.write(f"Database file: {db_path}")
-
+            # Retrieve and display data from the database
+            data = retrieve_data(db_path)
+            if data:
+                st.write("Data stored in SQLite database:")
+                st.write(data)
+            else:
+                st.write("No data found in the database.")
         else:
             st.write("Error: Output files not found.")
 
