@@ -6,4 +6,7 @@ pytesseract
 torchvision
 transformers
 yolov5
+cv2
+numpy
+PIL
 streamlit
