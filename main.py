@@ -17,8 +17,7 @@ from yolov5 import YOLOv5
 logging.basicConfig(level=logging.INFO)
 
 # Set the path to the installed Tesseract-OCR executable
-# Adjust this path if running locally
-pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Path for Unix-based systems
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Initialize YOLOv5 model
 model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
@@ -66,22 +65,19 @@ def extract_objects(boxes, image):
                 logging.warning(f"Skipping invalid box with data: {box}")
                 continue
 
-            # Unpack bounding box and detection data
             x1, y1, x2, y2, conf, class_id = box[:6]
             x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])  # Convert to integers
 
-            # Extract object image
             object_image = np.array(image)[y1:y2, x1:x2]
             object_image_pil = Image.fromarray(object_image)
 
-            # Save the object image to a temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
-                filename = temp_file.name
-                object_image_pil.save(filename)
+            # Save to a temporary file
+            temp_filename = tempfile.mktemp(suffix=".png")
+            object_image_pil.save(temp_filename)
 
             objects.append({
                 'object_id': i,
-                'filename': filename,
+                'filename': temp_filename,
                 'bounding_box': (x1, y1, x2, y2),
                 'confidence': conf,
                 'class_id': class_id
@@ -159,43 +155,36 @@ def generate_output(image_path, summary):
     image = Image.open(image_path)
     draw = ImageDraw.Draw(image)
 
-    # Define a list of colors to use for bounding boxes
     colors = ["red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta", "lime", "pink"]
 
-    # Set the font size and load a bold font
-    font_size = 20  # Increase the size as needed
+    font_size = 20
     try:
-        font = ImageFont.truetype("arialbd.ttf", font_size)  # 'arialbd.ttf' is a bold version of Arial
+        font = ImageFont.truetype("arialbd.ttf", font_size)
     except IOError:
         font = ImageFont.load_default()
         logging.warning("Custom font 'arialbd.ttf' not found. Using default font.")
 
     for obj in summary:
         x1, y1, x2, y2 = obj['bounding_box']
-
-        # Assign a color based on the object_id to ensure unique colors
         color = colors[obj['object_id'] % len(colors)]
-
-        # Draw the bounding box with the selected color
         draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
-
-        # Draw the text label with the same color and specified font
         draw.text((x1, y1 - font_size - 5), obj['description'], fill=color, font=font)
 
-    output_image_path = "output_image.png"
+    output_image_path = tempfile.mktemp(suffix=".png")
     image.save(output_image_path)
 
     df = pd.DataFrame(summary)
-    output_csv_path = "summary.csv"
+    output_csv_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(output_csv_path, index=False)
     logging.info(f"Output saved as '{output_image_path}' and '{output_csv_path}'.")
+
+    return output_image_path, output_csv_path
 
 # Function to execute the full pipeline with parallel processing
 def run_pipeline(image_path):
     try:
         boxes, image = segment_image(image_path)
 
-        # Parallelize object extraction, identification, and text extraction
         with ThreadPoolExecutor() as executor:
             objects_future = executor.submit(extract_objects, boxes, image)
             objects = objects_future.result()
@@ -207,46 +196,40 @@ def run_pipeline(image_path):
             text_data = text_data_future.result()
 
         summary = summarize_attributes(objects, descriptions, text_data)
-        generate_output(image_path, summary)
+        output_image_path, output_csv_path = generate_output(image_path, summary)
         logging.info("Pipeline completed successfully.")
+        return output_image_path, output_csv_path
     except Exception as e:
         logging.error(f"Pipeline failed: {e}")
+        return None, None
 
 # Streamlit app integration
 def main():
     st.title("AI Pipeline for Image Segmentation, Object Identification, and Text Extraction")
 
-    # File uploader widget for image upload
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-    # If an image is uploaded, run the pipeline
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         st.image(image, caption='Uploaded Image', use_column_width=True)
         st.write("Running the pipeline...")
 
-        # Save the uploaded image to a temporary path
+        # Save the uploaded image to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
             temp_image_path = temp_file.name
             image.save(temp_image_path)
 
         # Run the AI pipeline on the uploaded image
-        run_pipeline(temp_image_path)
+        output_image_path, output_csv_path = run_pipeline(temp_image_path)
 
         # Display the results
-        output_image_path = "output_image.png"
-        output_csv_path = "summary.csv"
-
-        if os.path.exists(output_image_path) and os.path.exists(output_csv_path):
-            # Display the output image
+        if output_image_path and output_csv_path:
             st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            # Display the summary CSV as a table
             summary_df = pd.read_csv(output_csv_path)
             st.write("Summary of Detected Objects:")
             st.dataframe(summary_df)
 
-            # Provide download link for CSV summary
             with open(output_csv_path, "rb") as file:
                 st.download_button(
                     label="Download Summary CSV",
