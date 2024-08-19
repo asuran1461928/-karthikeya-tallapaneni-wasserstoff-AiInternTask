@@ -3,13 +3,11 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 import pytesseract
-from torchvision import transforms
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
 import tempfile
-from yolov5 import YOLOv5
 import streamlit as st
 
 # Initialize logging
@@ -18,13 +16,17 @@ logging.basicConfig(level=logging.INFO)
 # Set the path to the installed Tesseract-OCR executable
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Initialize YOLOv5 model
-model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
-yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
-
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 caption_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to('cpu')
+
+# Mock YOLOv5 model (Replace with actual model loading if possible)
+class MockYOLOv5:
+    def predict(self, image, size=640):
+        # Mocking prediction results
+        return type('Results', (object,), {'xyxy': [np.array([[50, 50, 200, 200, 0.9, 1]])]})()
+
+yolov5_model = MockYOLOv5()
 
 # Function to generate captions using BLIP
 def generate_caption(image):
@@ -38,7 +40,7 @@ def generate_caption(image):
         logging.error(f"Error generating caption: {e}")
         return "Captioning failed"
 
-# Function to segment an image into objects using YOLOv5
+# Function to segment an image into objects using YOLOv5 (Mocked)
 def segment_image(image_path):
     logging.info(f"Segmenting image: {image_path}")
     if not os.path.exists(image_path):
@@ -202,21 +204,18 @@ def generate_output(image_path, summary, objects):
 def run_pipeline(image_path):
     try:
         boxes, image = segment_image(image_path)
+        objects = extract_objects(boxes, image)
 
+        # Run identification and text extraction in parallel
         with ThreadPoolExecutor() as executor:
-            objects_future = executor.submit(extract_objects, boxes, image)
-            objects = objects_future.result()
-
             descriptions_future = executor.submit(identify_objects, objects)
             text_data_future = executor.submit(extract_text_from_objects, objects)
-
+            
             descriptions = descriptions_future.result()
             text_data = text_data_future.result()
 
         summary = summarize_attributes(objects, descriptions, text_data)
-        output_image_path, output_csv_path, objects_csv_path = generate_output(image_path, summary, objects)
-        logging.info("Pipeline completed successfully.")
-        return output_image_path, output_csv_path, objects_csv_path
+        return generate_output(image_path, summary, objects)
     except Exception as e:
         logging.error(f"Error in pipeline: {e}")
         raise
