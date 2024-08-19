@@ -1,10 +1,11 @@
-torch==2.4.0
-opencv-python-headless==4.10.0.84
+opencv-python==4.5.3.56
+torch==1.12.1
+transformers==4.21.1
+pytesseract==0.3.8
+pandas==1.4.2
 Pillow==10.4.0
 numpy==2.1.0
 pandas==2.2.2
-pytesseract==0.3.13
-transformers==4.44.0
 yolov5==7.0.13
 streamlit==1.37.1
 tqdm==4.66.5
