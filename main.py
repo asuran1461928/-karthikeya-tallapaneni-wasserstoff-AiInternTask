@@ -5,7 +5,6 @@ import logging
 import os
 import pytesseract
 import streamlit as st
-from yolov5 import YOLOv5
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor
 
@@ -15,9 +14,17 @@ logging.basicConfig(level=logging.INFO)
 # Set the path to the installed Tesseract-OCR executable
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Initialize YOLOv5 model from the official repository
-model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
-yolov5_model = torch.hub.load('ultralytics/yolov5', 'custom', path=model_path, source='local')
+# Initialize YOLOv5 model using Ultralytics Hub
+def load_yolov5_model(model_name='yolov5s'):
+    try:
+        model = torch.hub.load('ultralytics/yolov5', model_name)
+        logging.info(f"YOLOv5 model '{model_name}' loaded successfully.")
+        return model
+    except Exception as e:
+        logging.error(f"Failed to load YOLOv5 model: {e}")
+        return None
+
+yolov5_model = load_yolov5_model()
 
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
