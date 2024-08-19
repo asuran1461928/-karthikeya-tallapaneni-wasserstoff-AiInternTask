@@ -1,5 +1,4 @@
 import torch
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import sqlite3
@@ -113,9 +112,11 @@ def extract_text_from_objects(objects):
     text_data = []
     for obj in objects:
         try:
-            image = cv2.imread(obj['filename'])
-            if image is None:
-                raise ValueError(f"Image file not readable: {obj['filename']}")
+            # Use PIL to open the image file
+            image = Image.open(obj['filename'])
+            # Convert image to grayscale for better OCR results (optional)
+            image = image.convert('L')
+            # Perform OCR with pytesseract
             text = pytesseract.image_to_string(image)
             text_data.append({
                 'object_id': obj['object_id'],
