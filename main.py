@@ -2,19 +2,15 @@ import torch
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-import pandas as pd
-import pytesseract
-from torchvision import transforms
-from transformers import BlipProcessor, BlipForConditionalGeneration
-from concurrent.futures import ThreadPoolExecutor
+import sqlite3
+import tempfile
 import logging
 import os
-import tempfile
-import base64
-from io import BytesIO
-import sqlite3
+import pytesseract
 import streamlit as st
 from yolov5 import YOLOv5
+from transformers import BlipProcessor, BlipForConditionalGeneration
+from concurrent.futures import ThreadPoolExecutor
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -29,12 +25,6 @@ yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 caption_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to('cpu')
-
-# Function to convert images to base64-encoded strings
-def image_to_base64(image_path):
-    with open(image_path, "rb") as image_file:
-        base64_encoded = base64.b64encode(image_file.read()).decode('utf-8')
-    return base64_encoded
 
 # Function to generate captions using BLIP
 def generate_caption(image):
@@ -148,22 +138,63 @@ def summarize_attributes(objects, descriptions, text_data):
         description = next((item['description'] for item in descriptions if item['object_id'] == obj['object_id']), None)
         text = next((item['text'] for item in text_data if item['object_id'] == obj['object_id']), None)
 
-        base64_image = image_to_base64(obj['filename'])
-
         summary.append({
             'object_id': obj['object_id'],
-            'Object Image (Base64)': base64_image,  # Use base64 image data
-            'Bounding Box': obj['bounding_box'],
-            'Confidence': obj['confidence'],
-            'Class ID': obj['class_id'],
-            'Description': description,
-            'Text': text
+            'bounding_box': obj['bounding_box'],
+            'confidence': obj['confidence'],
+            'class_id': obj['class_id'],
+            'description': description,
+            'text': text,
+            'filename': obj['filename']
         })
 
     return summary
 
-# Function to generate output image and save to database
-def generate_output(image_path, summary):
+# Function to initialize the SQLite database
+def initialize_database(db_path):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS objects (
+            object_id INTEGER PRIMARY KEY,
+            bounding_box TEXT,
+            confidence REAL,
+            class_id INTEGER,
+            description TEXT,
+            text TEXT,
+            object_image BLOB
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Function to save the summary to the SQLite database
+def save_to_database(db_path, summary):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    for obj in summary:
+        with open(obj['filename'], 'rb') as file:
+            img_data = file.read()
+
+        cursor.execute('''
+            INSERT INTO objects (object_id, bounding_box, confidence, class_id, description, text, object_image)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            obj['object_id'],
+            str(obj['bounding_box']),
+            obj['confidence'],
+            obj['class_id'],
+            obj['description'],
+            obj['text'],
+            img_data
+        ))
+
+    conn.commit()
+    conn.close()
+
+# Function to generate output image and save data to SQLite database
+def generate_output(image_path, summary, db_path):
     image = Image.open(image_path)
     draw = ImageDraw.Draw(image)
 
@@ -177,44 +208,23 @@ def generate_output(image_path, summary):
         logging.warning("Custom font 'arialbd.ttf' not found. Using default font.")
 
     for obj in summary:
-        x1, y1, x2, y2 = obj['Bounding Box']
-        color = colors[summary.index(obj) % len(colors)]  # Ensure color uniqueness
+        x1, y1, x2, y2 = obj['bounding_box']
+        color = colors[obj['object_id'] % len(colors)]
         draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
-        draw.text((x1, y1 - font_size - 5), obj['Description'], fill=color, font=font)
+        draw.text((x1, y1 - font_size - 5), obj['description'], fill=color, font=font)
 
     output_image_path = tempfile.mktemp(suffix=".png")
     image.save(output_image_path)
 
-    # Connect to SQLite database and create table if it doesn't exist
-    conn = sqlite3.connect('objects.db')
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS object_summary (
-            object_id INTEGER PRIMARY KEY,
-            object_image TEXT,
-            bounding_box TEXT,
-            confidence REAL,
-            class_id INTEGER,
-            description TEXT,
-            text TEXT
-        )
-    """)
+    # Save to database
+    save_to_database(db_path, summary)
 
-    # Insert data into the database
-    for item in summary:
-        cursor.execute("""
-            INSERT INTO object_summary (object_id, object_image, bounding_box, confidence, class_id, description, text)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (item['object_id'], item['Object Image (Base64)'], str(item['Bounding Box']), item['Confidence'], item['Class ID'], item['Description'], item['Text']))
+    logging.info(f"Output saved as '{output_image_path}' and data stored in database '{db_path}'.")
 
-    conn.commit()
-    conn.close()
-
-    logging.info(f"Output image saved as '{output_image_path}'.")
     return output_image_path
 
 # Function to execute the full pipeline with parallel processing
-def run_pipeline(image_path):
+def run_pipeline(image_path, db_path):
     try:
         boxes, image = segment_image(image_path)
 
@@ -229,19 +239,12 @@ def run_pipeline(image_path):
             text_data = text_data_future.result()
 
         summary = summarize_attributes(objects, descriptions, text_data)
-        output_image_path = generate_output(image_path, summary)
-        
+        output_image_path = generate_output(image_path, summary, db_path)
         logging.info("Pipeline completed successfully.")
         return output_image_path
     except Exception as e:
         logging.error(f"Pipeline failed: {e}")
         return None
-
-# Function to convert base64 to image
-def base64_to_image(base64_string):
-    image_data = base64.b64decode(base64_string)
-    image = Image.open(BytesIO(image_data))
-    return image
 
 # Streamlit app integration
 def main():
@@ -259,33 +262,23 @@ def main():
             temp_image_path = temp_file.name
             image.save(temp_image_path)
 
+        # Set up SQLite database
+        db_path = tempfile.mktemp(suffix=".db")
+        initialize_database(db_path)
+
         # Run the AI pipeline on the uploaded image
-        output_image_path = run_pipeline(temp_image_path)
+        output_image_path = run_pipeline(temp_image_path, db_path)
 
         # Display the results
         if output_image_path:
             st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            # Connect to SQLite database and fetch data
-            conn = sqlite3.connect('objects.db')
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM object_summary")
-            rows = cursor.fetchall()
-            conn.close()
-
-            # Create a DataFrame from the fetched data
-            df = pd.DataFrame(rows, columns=['object_id', 'object_image', 'bounding_box', 'confidence', 'class_id', 'description', 'text'])
-            st.write("Summary of Detected Objects:")
-            st.dataframe(df)
-
-            # Display each object's image
-            for index, row in df.iterrows():
-                image_data = row['object_image']
-                image = base64_to_image(image_data)
-                st.image(image, caption=f"Object {row['object_id']}", use_column_width=True)
+            # Optionally provide a way to download or view the database
+            st.write("Data stored in SQLite database.")
+            st.write(f"Database file: {db_path}")
 
         else:
-            st.write("Error: Output image not found.")
+            st.write("Error: Output files not found.")
 
 if __name__ == "__main__":
     main()
