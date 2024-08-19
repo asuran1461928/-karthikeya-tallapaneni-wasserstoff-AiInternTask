@@ -7,3 +7,4 @@ transformers
 yolov5
 streamlit
 pandas
+opencv-python-headless==4.8.0.74
