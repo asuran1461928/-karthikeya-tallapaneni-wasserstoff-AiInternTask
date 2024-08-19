@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-import sqlite3
 import tempfile
 import logging
 import os
@@ -151,51 +150,8 @@ def summarize_attributes(objects, descriptions, text_data):
 
     return summary
 
-# Function to initialize the SQLite database
-def initialize_database(db_path):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS objects (
-            object_id INTEGER PRIMARY KEY,
-            bounding_box TEXT,
-            confidence REAL,
-            class_id INTEGER,
-            description TEXT,
-            text TEXT,
-            object_image BLOB
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-# Function to save the summary to the SQLite database
-def save_to_database(db_path, summary):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    for obj in summary:
-        with open(obj['filename'], 'rb') as file:
-            img_data = file.read()
-
-        cursor.execute('''
-            INSERT INTO objects (object_id, bounding_box, confidence, class_id, description, text, object_image)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            obj['object_id'],
-            str(obj['bounding_box']),
-            obj['confidence'],
-            obj['class_id'],
-            obj['description'],
-            obj['text'],
-            img_data
-        ))
-
-    conn.commit()
-    conn.close()
-
-# Function to generate output image and save data to SQLite database
-def generate_output(image_path, summary, db_path):
+# Function to generate output image and display results
+def generate_output(image_path, summary):
     image = Image.open(image_path)
     draw = ImageDraw.Draw(image)
 
@@ -217,15 +173,12 @@ def generate_output(image_path, summary, db_path):
     output_image_path = tempfile.mktemp(suffix=".png")
     image.save(output_image_path)
 
-    # Save to database
-    save_to_database(db_path, summary)
-
-    logging.info(f"Output saved as '{output_image_path}' and data stored in database '{db_path}'.")
+    logging.info(f"Output image saved as '{output_image_path}'.")
 
     return output_image_path
 
 # Function to execute the full pipeline with parallel processing
-def run_pipeline(image_path, db_path):
+def run_pipeline(image_path):
     try:
         boxes, image = segment_image(image_path)
 
@@ -240,7 +193,7 @@ def run_pipeline(image_path, db_path):
             text_data = text_data_future.result()
 
         summary = summarize_attributes(objects, descriptions, text_data)
-        output_image_path = generate_output(image_path, summary, db_path)
+        output_image_path = generate_output(image_path, summary)
         logging.info("Pipeline completed successfully.")
         return output_image_path, summary
     except Exception as e:
@@ -256,44 +209,26 @@ def main():
         image = Image.open(uploaded_file)
         st.image(image, caption='Uploaded Image', use_column_width=True)
 
-        # Save the uploaded image to a temporary directory
         temp_dir = "temp_images"
         os.makedirs(temp_dir, exist_ok=True)
         image_path = os.path.join(temp_dir, uploaded_file.name)
         image.save(image_path)
 
-        # Set up SQLite database
-        db_path = tempfile.mktemp(suffix=".db")
-        initialize_database(db_path)
-
         # Run the AI pipeline on the uploaded image
-        output_image_path, summary = run_pipeline(image_path, db_path)
+        output_image_path, summary = run_pipeline(image_path)
 
-        # Display segmented images and descriptions
-        if summary:
+        if output_image_path and summary:
+            st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
+
             st.subheader("Segmented Objects and Descriptions")
-            segmented_dir = "temp_segmented"
-            os.makedirs(segmented_dir, exist_ok=True)
             for obj in summary:
-                # Ensure the file exists before trying to open it
-                segment_path = obj['filename']
-                if os.path.exists(segment_path):
-                    col1, col2 = st.columns(2)
-                    col1.image(Image.open(segment_path), use_column_width=True)
-                    col2.write(f"**{obj['description']}**: {obj['text']}")
-                else:
-                    st.write(f"Segmented image file not found: {segment_path}")
-
-            # Display the output image with annotations
-            st.subheader("Annotated Output Image")
-            if os.path.exists(output_image_path):
-                st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
-            else:
-                st.write(f"Annotated output image not found: {output_image_path}")
-
-            # Optionally provide a way to download or view the database
-            st.write("Data stored in SQLite database.")
-            st.write(f"Database file: {db_path}")
+                st.write(f"**Object ID:** {obj['object_id']}")
+                st.write(f"**Bounding Box:** {obj['bounding_box']}")
+                st.write(f"**Confidence:** {obj['confidence']:.2f}")
+                st.write(f"**Class ID:** {obj['class_id']}")
+                st.write(f"**Description:** {obj['description']}")
+                st.write(f"**Extracted Text:** {obj['text']}")
+                st.write("---")
 
         else:
             st.write("Error: Output files not found.")
