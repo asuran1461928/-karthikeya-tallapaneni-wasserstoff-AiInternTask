@@ -1,5 +1,4 @@
 import torch
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
@@ -114,10 +113,17 @@ def extract_text_from_objects(objects):
     text_data = []
     for obj in objects:
         try:
-            image = cv2.imread(obj['filename'])
+            if not os.path.exists(obj['filename']):
+                raise FileNotFoundError(f"Image file does not exist: {obj['filename']}")
+
+            # Check for file readability
+            image = Image.open(obj['filename'])
             if image is None:
                 raise ValueError(f"Image file not readable: {obj['filename']}")
-            text = pytesseract.image_to_string(image)
+
+            # Convert to OpenCV image
+            image_cv = np.array(image)
+            text = pytesseract.image_to_string(image_cv)
             text_data.append({
                 'object_id': obj['object_id'],
                 'text': text
@@ -212,58 +218,57 @@ def run_pipeline(image_path):
         logging.info("Pipeline completed successfully.")
         return output_image_path, output_csv_path, objects_csv_path
     except Exception as e:
-        logging.error(f"Pipeline failed: {e}")
-        return None, None, None
+        logging.error(f"Error in pipeline: {e}")
+        raise
 
-# Streamlit app integration
+# Streamlit interface
 def main():
-    st.title("AI Pipeline for Image Segmentation, Object Identification, and Text Extraction")
+    st.title("AI Pipeline for Image Analysis")
 
-    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.image(image, caption='Uploaded Image', use_column_width=True)
-        st.write("Running the pipeline...")
-
-        # Save the uploaded image to a temporary file
+    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg"])
+    if uploaded_file:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-            temp_image_path = temp_file.name
-            image.save(temp_image_path)
+            temp_file.write(uploaded_file.read())
+            temp_file_path = temp_file.name
 
-        # Run the AI pipeline on the uploaded image
-        output_image_path, output_csv_path, objects_csv_path = run_pipeline(temp_image_path)
+        st.image(temp_file_path, caption='Uploaded Image', use_column_width=True)
 
-        # Display the results
-        if output_image_path and output_csv_path and objects_csv_path:
-            st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
+        if st.button("Run Pipeline"):
+            try:
+                output_image_path, output_csv_path, objects_csv_path = run_pipeline(temp_file_path)
 
-            summary_df = pd.read_csv(output_csv_path)
-            st.write("Summary of Detected Objects:")
-            st.dataframe(summary_df)
+                # Display the output image with annotations
+                st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            objects_df = pd.read_csv(objects_csv_path)
-            st.write("Extracted Objects:")
-            st.dataframe(objects_df)
+                # Display summary CSV
+                summary_df = pd.read_csv(output_csv_path)
+                st.write("Summary of Detected Objects:")
+                st.dataframe(summary_df)
 
-            # Download buttons for CSV files
-            with open(output_csv_path, "rb") as file:
-                st.download_button(
-                    label="Download Summary CSV",
-                    data=file,
-                    file_name="summary.csv",
-                    mime="text/csv"
-                )
-            
-            with open(objects_csv_path, "rb") as file:
-                st.download_button(
-                    label="Download Extracted Objects CSV",
-                    data=file,
-                    file_name="object_id.csv",
-                    mime="text/csv"
-                )
-        else:
-            st.write("Error: Output files not found.")
+                # Display extracted objects CSV
+                objects_df = pd.read_csv(objects_csv_path)
+                st.write("Extracted Objects:")
+                st.dataframe(objects_df)
+
+                # Download buttons for CSV files
+                with open(output_csv_path, "rb") as file:
+                    st.download_button(
+                        label="Download Summary CSV",
+                        data=file,
+                        file_name="summary.csv",
+                        mime="text/csv"
+                    )
+                
+                with open(objects_csv_path, "rb") as file:
+                    st.download_button(
+                        label="Download Extracted Objects CSV",
+                        data=file,
+                        file_name="object_id.csv",
+                        mime="text/csv"
+                    )
+            except Exception as e:
+                st.error(f"Error: {e}")
+                logging.error(f"Error running pipeline: {e}")
 
 if __name__ == "__main__":
     main()
