@@ -194,15 +194,6 @@ def save_to_database(db_path, summary):
     conn.commit()
     conn.close()
 
-# Function to retrieve data from SQLite database
-def retrieve_data(db_path):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM objects')
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
-
 # Function to generate output image and save data to SQLite database
 def generate_output(image_path, summary, db_path):
     image = Image.open(image_path)
@@ -251,45 +242,53 @@ def run_pipeline(image_path, db_path):
         summary = summarize_attributes(objects, descriptions, text_data)
         output_image_path = generate_output(image_path, summary, db_path)
         logging.info("Pipeline completed successfully.")
-        return output_image_path
+        return output_image_path, summary
     except Exception as e:
         logging.error(f"Pipeline failed: {e}")
-        return None
+        return None, None
 
 # Streamlit app integration
 def main():
-    st.title("AI Pipeline for Image Segmentation, Object Identification, and Text Extraction")
+    st.title("Image Analysis App")
 
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         st.image(image, caption='Uploaded Image', use_column_width=True)
-        st.write("Running the pipeline...")
 
-        # Save the uploaded image to a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-            temp_image_path = temp_file.name
-            image.save(temp_image_path)
+        # Save the uploaded image to a temporary directory
+        temp_dir = "temp_images"
+        os.makedirs(temp_dir, exist_ok=True)
+        image_path = os.path.join(temp_dir, uploaded_file.name)
+        image.save(image_path)
 
         # Set up SQLite database
         db_path = tempfile.mktemp(suffix=".db")
         initialize_database(db_path)
 
         # Run the AI pipeline on the uploaded image
-        output_image_path = run_pipeline(temp_image_path, db_path)
+        output_image_path, summary = run_pipeline(image_path, db_path)
 
-        # Display the results
-        if output_image_path:
+        # Display segmented images and descriptions
+        if summary:
+            st.subheader("Segmented Objects and Descriptions")
+            segmented_dir = "temp_segmented"
+            os.makedirs(segmented_dir, exist_ok=True)
+            for obj in summary:
+                col1, col2 = st.columns(2)
+                segment_path = os.path.join(segmented_dir, f"{obj['object_id']}.jpg")
+                col1.image(Image.open(segment_path), use_column_width=True)
+                col2.write(f"**{obj['description']}**: {obj['text']}")
+
+            # Display the output image with annotations
+            st.subheader("Annotated Output Image")
             st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            # Retrieve and display data from the database
-            data = retrieve_data(db_path)
-            if data:
-                st.write("Data stored in SQLite database:")
-                st.write(data)
-            else:
-                st.write("No data found in the database.")
+            # Optionally provide a way to download or view the database
+            st.write("Data stored in SQLite database.")
+            st.write(f"Database file: {db_path}")
+
         else:
             st.write("Error: Output files not found.")
 
