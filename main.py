@@ -1,10 +1,8 @@
 import torch
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 import pytesseract
-from torchvision import transforms
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor
 import logging
@@ -68,12 +66,11 @@ def extract_objects(boxes, image):
             x1, y1, x2, y2, conf, class_id = box[:6]
             x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])  # Convert to integers
 
-            object_image = np.array(image)[y1:y2, x1:x2]
-            object_image_pil = Image.fromarray(object_image)
+            object_image = image.crop((x1, y1, x2, y2))
 
             # Save to a temporary file
             temp_filename = tempfile.mktemp(suffix=".png")
-            object_image_pil.save(temp_filename)
+            object_image.save(temp_filename)
 
             objects.append({
                 'object_id': i,
@@ -114,9 +111,7 @@ def extract_text_from_objects(objects):
     text_data = []
     for obj in objects:
         try:
-            image = cv2.imread(obj['filename'])
-            if image is None:
-                raise ValueError(f"Image file not readable: {obj['filename']}")
+            image = Image.open(obj['filename'])
             text = pytesseract.image_to_string(image)
             text_data.append({
                 'object_id': obj['object_id'],
