@@ -250,7 +250,6 @@ def run_pipeline(image_path, db_path):
 # Streamlit app integration
 def main():
     st.title("Image Analysis App")
-
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
@@ -276,14 +275,21 @@ def main():
             segmented_dir = "temp_segmented"
             os.makedirs(segmented_dir, exist_ok=True)
             for obj in summary:
-                col1, col2 = st.columns(2)
-                segment_path = os.path.join(segmented_dir, f"{obj['object_id']}.jpg")
-                col1.image(Image.open(segment_path), use_column_width=True)
-                col2.write(f"**{obj['description']}**: {obj['text']}")
+                # Ensure the file exists before trying to open it
+                segment_path = obj['filename']
+                if os.path.exists(segment_path):
+                    col1, col2 = st.columns(2)
+                    col1.image(Image.open(segment_path), use_column_width=True)
+                    col2.write(f"**{obj['description']}**: {obj['text']}")
+                else:
+                    st.write(f"Segmented image file not found: {segment_path}")
 
             # Display the output image with annotations
             st.subheader("Annotated Output Image")
-            st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
+            if os.path.exists(output_image_path):
+                st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
+            else:
+                st.write(f"Annotated output image not found: {output_image_path}")
 
             # Optionally provide a way to download or view the database
             st.write("Data stored in SQLite database.")
