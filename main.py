@@ -1,5 +1,4 @@
 import torch
-import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
@@ -114,9 +113,8 @@ def extract_text_from_objects(objects):
     text_data = []
     for obj in objects:
         try:
-            image = cv2.imread(obj['filename'])
-            if image is None:
-                raise ValueError(f"Image file not readable: {obj['filename']}")
+            # Replacing cv2 with PIL for text extraction
+            image = Image.open(obj['filename'])
             text = pytesseract.image_to_string(image)
             text_data.append({
                 'object_id': obj['object_id'],
