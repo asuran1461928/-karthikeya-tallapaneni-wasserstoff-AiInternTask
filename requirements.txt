@@ -1,4 +1,4 @@
-opencv-python-contrib-headless.
+
 torch
 opencv-python
 numpy
