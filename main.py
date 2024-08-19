@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import tempfile
 import logging
@@ -16,9 +15,9 @@ logging.basicConfig(level=logging.INFO)
 # Set the path to the installed Tesseract-OCR executable
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Initialize YOLOv5 model
+# Initialize YOLOv5 model from the official repository
 model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
-yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
+yolov5_model = torch.hub.load('ultralytics/yolov5', 'custom', path=model_path, source='local')
 
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -44,8 +43,8 @@ def segment_image(image_path):
         raise FileNotFoundError(f"Image file does not exist: {image_path}")
     try:
         image = Image.open(image_path).convert("RGB")
-        results = yolov5_model.predict(image, size=640)  # Perform inference
-        boxes = results.xyxy[0].numpy()  # Extract boxes
+        results = yolov5_model(image)  # Perform inference
+        boxes = results.xyxy[0].cpu().numpy()  # Extract boxes
 
         logging.info(f"Segmentation completed: {len(boxes)} boxes detected.")
         return boxes, image
@@ -217,19 +216,21 @@ def main():
         # Run the AI pipeline on the uploaded image
         output_image_path, summary = run_pipeline(image_path)
 
-        if output_image_path and summary:
+        # Display the results
+        if output_image_path:
             st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            st.subheader("Segmented Objects and Descriptions")
+            # Display detailed information
+            st.subheader("Object Details")
             for obj in summary:
-                st.write(f"**Object ID:** {obj['object_id']}")
-                st.write(f"**Bounding Box:** {obj['bounding_box']}")
-                st.write(f"**Confidence:** {obj['confidence']:.2f}")
-                st.write(f"**Class ID:** {obj['class_id']}")
-                st.write(f"**Description:** {obj['description']}")
-                st.write(f"**Extracted Text:** {obj['text']}")
+                st.write(f"**Object ID**: {obj['object_id']}")
+                st.write(f"**Bounding Box**: {obj['bounding_box']}")
+                st.write(f"**Confidence**: {obj['confidence']:.2f}")
+                st.write(f"**Class ID**: {obj['class_id']}")
+                st.write(f"**Description**: {obj['description']}")
+                st.write(f"**Text**: {obj['text']}")
+                st.image(obj['filename'], caption=f"Object {obj['object_id']} Image", use_column_width=True)
                 st.write("---")
-
         else:
             st.write("Error: Output files not found.")
 
