@@ -1,4 +1,5 @@
 import torch
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
@@ -8,14 +9,16 @@ from transformers import BlipProcessor, BlipForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
-from yolov5 import YOLOv5
+import tempfile
 import streamlit as st
+from yolov5 import YOLOv5
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
 # Set the path to the installed Tesseract-OCR executable
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Adjust this path if running locally
+pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'  # Path for Unix-based systems
 
 # Initialize YOLOv5 model
 model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
@@ -70,8 +73,11 @@ def extract_objects(boxes, image):
             # Extract object image
             object_image = np.array(image)[y1:y2, x1:x2]
             object_image_pil = Image.fromarray(object_image)
-            filename = f"object_{i}.png"
-            object_image_pil.save(filename)
+
+            # Save the object image to a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
+                filename = temp_file.name
+                object_image_pil.save(filename)
 
             objects.append({
                 'object_id': i,
@@ -220,8 +226,9 @@ def main():
         st.write("Running the pipeline...")
 
         # Save the uploaded image to a temporary path
-        temp_image_path = "uploaded_image.jpg"
-        image.save(temp_image_path)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+            temp_image_path = temp_file.name
+            image.save(temp_image_path)
 
         # Run the AI pipeline on the uploaded image
         run_pipeline(temp_image_path)
