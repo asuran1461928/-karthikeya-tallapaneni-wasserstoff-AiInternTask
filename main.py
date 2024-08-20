@@ -38,11 +38,25 @@ def segment_image(image_path):
         logging.error(f"Image file does not exist: {image_path}")
         raise FileNotFoundError(f"Image file does not exist: {image_path}")
     try:
+        # Open the image and convert to RGB
         image = Image.open(image_path).convert("RGB")
-        results = yolov5_model.predict(image, size=640)  # Perform inference
-        boxes = results.xyxy[0].numpy()  # Extract boxes
+
+        # Resize the image using Nearest-Neighbor interpolation
+        original_size = image.size
+        target_size = (640, 640)  # This is typically what YOLO expects
+        image = image.resize(target_size, Image.NEAREST)
+
+        # Perform inference with YOLOv5
+        results = yolov5_model.predict(image, size=640)
+
+        # Extract bounding boxes
+        boxes = results.xyxy[0].numpy()
 
         logging.info(f"Segmentation completed: {len(boxes)} boxes detected.")
+        
+        # Resize image back to original size for consistent output
+        image = image.resize(original_size, Image.NEAREST)
+
         return boxes, image
     except Exception as e:
         logging.error(f"Error in segmentation: {e}")
