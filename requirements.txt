@@ -7,3 +7,5 @@ transformers
 yolov5
 streamlit
 pandas
+realesrgan
+basicsr
