@@ -7,4 +7,3 @@ transformers
 yolov5
 streamlit
 pandas
-tesseract-ocr
