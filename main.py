@@ -4,7 +4,7 @@ import pandas as pd
 import tempfile
 import logging
 from PIL import Image, ImageDraw, ImageFont
-from ultralytics import YOLO
+from yolov5 import YOLOv5
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import torch
 
@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Initialize YOLOv5 model
 model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
-yolov5_model = YOLO(model_path)  # Use 'cpu' or 'cuda'
+yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
 
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -38,25 +38,11 @@ def segment_image(image_path):
         logging.error(f"Image file does not exist: {image_path}")
         raise FileNotFoundError(f"Image file does not exist: {image_path}")
     try:
-        # Open the image and convert to RGB
         image = Image.open(image_path).convert("RGB")
-
-        # Resize the image using Nearest-Neighbor interpolation
-        original_size = image.size
-        target_size = (640, 640)  # This is typically what YOLO expects
-        image = image.resize(target_size, Image.NEAREST)
-
-        # Perform inference with YOLOv5
-        results = yolov5_model.predict(source=image, size=640)
-
-        # Extract bounding boxes
-        boxes = results.pandas().xyxy[0].to_numpy()  # Convert to numpy array
+        results = yolov5_model.predict(image, size=640)  # Perform inference
+        boxes = results.xyxy[0].numpy()  # Extract boxes
 
         logging.info(f"Segmentation completed: {len(boxes)} boxes detected.")
-        
-        # Resize image back to original size for consistent output
-        image = image.resize(original_size, Image.NEAREST)
-
         return boxes, image
     except Exception as e:
         logging.error(f"Error in segmentation: {e}")
