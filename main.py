@@ -15,7 +15,7 @@ from yolov5 import YOLOv5
 logging.basicConfig(level=logging.INFO)
 
 # Set the path to the installed Tesseract-OCR executable
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'description_file'
 
 # Initialize YOLOv5 model
 model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
