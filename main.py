@@ -7,9 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 from yolov5 import YOLOv5
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import torch
-from basicsr.archs.rrdbnet_arch import RRDBNet
-from basicsr.utils.download_util import load_file_from_url
-from realesrgan import RealESRGANer
+from realesrgan import RealESRGAN
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -22,19 +20,9 @@ yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 caption_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to('cpu')
 
-# Load the ESRGAN model
-def load_esrgan_model():
-    model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-    model_path = 'RealESRGAN_x4plus.pth'  # You need to download this model
-    file_url = 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.3.0/RealESRGAN_x4plus.pth'
-    model_path = load_file_from_url(url=file_url, model_dir='.', progress=True)
-    return RealESRGANer(scale=4, model_path=model_path, model=model, tile=256, tile_pad=10, pre_pad=0, half=False)
-
-# Apply super-resolution using ESRGAN
-def apply_esrgan(image):
-    esrgan = load_esrgan_model()
-    sr_image, _ = esrgan.enhance(image, outscale=4)
-    return sr_image
+# Initialize Real-ESRGAN model for super-resolution
+real_esrgan = RealESRGAN(arch='rrdb', scale=4)  # Adjust scale as needed
+real_esrgan.load_weights('RealESRGAN_x4plus.pth')  # Path to Real-ESRGAN weights
 
 # Function to generate captions using BLIP
 def generate_caption(image):
@@ -48,6 +36,15 @@ def generate_caption(image):
         logging.error(f"Error generating caption: {e}")
         return "Captioning failed"
 
+# Function to apply super-resolution using Real-ESRGAN
+def apply_super_resolution(image):
+    try:
+        sr_image = real_esrgan.predict(image)
+        return sr_image
+    except Exception as e:
+        logging.error(f"Error applying super-resolution: {e}")
+        return image
+
 # Function to segment an image into objects using YOLOv5
 def segment_image(image_path):
     logging.info(f"Segmenting image: {image_path}")
@@ -59,9 +56,9 @@ def segment_image(image_path):
         image = Image.open(image_path).convert("RGB")
 
         # Apply super-resolution
-        image = apply_esrgan(image)
+        image = apply_super_resolution(image)
 
-        # Resize the image using Nearest-Neighbor interpolation
+        # Resize the image for YOLO
         original_size = image.size
         target_size = (640, 640)  # This is typically what YOLO expects
         image = image.resize(target_size, Image.NEAREST)
@@ -208,7 +205,7 @@ def run_pipeline(image_path):
 
 # Streamlit app integration
 def main():
-    st.title("AI Pipeline for Image Segmentation and Object Identification with Super-Resolution")
+    st.title("AI Pipeline for Image Segmentation and Object Identification")
 
     # Upload image
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
