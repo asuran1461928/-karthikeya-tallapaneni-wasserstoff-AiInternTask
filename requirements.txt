@@ -1,10 +1,9 @@
-streamlit
-Pillow
-yolov5
-transformers
 torch
-torchvision
-torchaudio
+opencv-python
+numpy
+Pillow
+pytesseract
+transformers
+yolov5
+streamlit
 pandas
-realesrgan
-basicsr
