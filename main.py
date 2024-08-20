@@ -4,25 +4,20 @@ import pandas as pd
 import tempfile
 import logging
 from PIL import Image, ImageDraw, ImageFont
-from yolov5 import YOLOv5
+from ultralytics import YOLO
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import torch
-from realesrgan import RealESRGAN
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
 # Initialize YOLOv5 model
 model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
-yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
+yolov5_model = YOLO(model_path)  # Use 'cpu' or 'cuda'
 
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 caption_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to('cpu')
-
-# Initialize Real-ESRGAN model for super-resolution
-real_esrgan = RealESRGAN(arch='rrdb', scale=4)  # Adjust scale as needed
-real_esrgan.load_weights('RealESRGAN_x4plus.pth')  # Path to Real-ESRGAN weights
 
 # Function to generate captions using BLIP
 def generate_caption(image):
@@ -36,15 +31,6 @@ def generate_caption(image):
         logging.error(f"Error generating caption: {e}")
         return "Captioning failed"
 
-# Function to apply super-resolution using Real-ESRGAN
-def apply_super_resolution(image):
-    try:
-        sr_image = real_esrgan.predict(image)
-        return sr_image
-    except Exception as e:
-        logging.error(f"Error applying super-resolution: {e}")
-        return image
-
 # Function to segment an image into objects using YOLOv5
 def segment_image(image_path):
     logging.info(f"Segmenting image: {image_path}")
@@ -55,19 +41,16 @@ def segment_image(image_path):
         # Open the image and convert to RGB
         image = Image.open(image_path).convert("RGB")
 
-        # Apply super-resolution
-        image = apply_super_resolution(image)
-
-        # Resize the image for YOLO
+        # Resize the image using Nearest-Neighbor interpolation
         original_size = image.size
         target_size = (640, 640)  # This is typically what YOLO expects
         image = image.resize(target_size, Image.NEAREST)
 
         # Perform inference with YOLOv5
-        results = yolov5_model.predict(image, size=640)
+        results = yolov5_model.predict(source=image, size=640)
 
         # Extract bounding boxes
-        boxes = results.xyxy[0].numpy()
+        boxes = results.pandas().xyxy[0].to_numpy()  # Convert to numpy array
 
         logging.info(f"Segmentation completed: {len(boxes)} boxes detected.")
         
