@@ -1,0 +1,35 @@
+object_id,bounding_box,confidence,class_id,description
+0,"(27, 194, 201, 569)",0.8838408,0.0,a group of people walking down a street
+1,"(177, 151, 340, 572)",0.8565318,0.0,a police officer talking to a child
+2,"(483, 150, 601, 485)",0.8550753,0.0,a man holding a rifle in the street
+3,"(624, 159, 721, 499)",0.85228074,0.0,a man in a white shirt and yellow helmet is walking down the street
+4,"(145, 85, 178, 210)",0.8069807,0.0,a man is skateboarding on a skateboard
+5,"(421, 163, 518, 529)",0.79864234,0.0,a group of men playing a game of tug
+6,"(866, 159, 958, 407)",0.7797579,0.0,a group of people riding motorcycles down a street
+7,"(164, 313, 256, 574)",0.672309,0.0,a man in a blue shirt and black pants
+8,"(347, 97, 378, 203)",0.61088145,0.0,a group of people standing in a crowd
+9,"(721, 136, 795, 250)",0.60288554,0.0,a group of people riding on a motorcycle
+10,"(310, 266, 409, 415)",0.6026628,3.0,a man riding a motorcycle down a street
+11,"(86, 101, 124, 206)",0.58422965,0.0,a group of people walking down a street
+12,"(934, 183, 987, 275)",0.5214669,2.0,a car is driving down the road with a flag
+13,"(278, 145, 343, 205)",0.51686573,3.0,a group of people are standing in a room
+14,"(674, 316, 934, 579)",0.51532805,3.0,a man is riding a scoot on a sc scoot
+15,"(201, 90, 236, 179)",0.49550018,0.0,a group of people walking down a street
+16,"(629, 109, 663, 222)",0.49304548,0.0,a group of people walking down a street
+17,"(848, 106, 880, 204)",0.47826996,0.0,a group of people riding on the back of a motorcycle
+18,"(747, 230, 902, 566)",0.47351345,0.0,a group of people riding on the back of a scoot
+19,"(323, 99, 351, 185)",0.46708658,0.0,a group of people are standing in a crowd
+20,"(572, 103, 774, 216)",0.45652297,2.0,a car with a bunch of people in the back
+21,"(727, 167, 849, 352)",0.43515092,0.0,a group of people riding motorcycles down a street
+22,"(374, 77, 446, 148)",0.42754826,2.0,a police car is stopped at the scene
+23,"(2, 179, 77, 320)",0.4011303,0.0,a group of people wearing masks and standing in a line
+24,"(519, 103, 572, 170)",0.38030145,0.0,a group of people standing around a baseball field
+25,"(240, 99, 268, 159)",0.36406267,0.0,a group of people sitting at a table
+26,"(658, 211, 712, 323)",0.36279675,26.0,a man in a white shirt and black tie
+27,"(368, 92, 401, 208)",0.36055857,0.0,a group of people riding on top of a hill
+28,"(437, 96, 468, 166)",0.36003372,0.0,a group of people standing around a table
+29,"(0, 245, 102, 574)",0.3406389,0.0,a man is sitting on a bed with his head down
+30,"(507, 125, 646, 228)",0.33424386,2.0,a man in a white shirt and a red truck
+31,"(812, 144, 866, 206)",0.2944486,3.0,a group of people riding on top of a red and yellow motorcycle
+32,"(206, 93, 263, 164)",0.27935466,0.0,a group of people standing around a car
+33,"(330, 213, 430, 340)",0.26497605,3.0,a group of motorcycles
