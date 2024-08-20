@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
-import pytesseract
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from concurrent.futures import ThreadPoolExecutor
 import logging
@@ -13,9 +12,6 @@ from yolov5 import YOLOv5
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
-
-# Set the path to the installed Tesseract-OCR executable
-pytesseract.pytesseract.tesseract_cmd = r'description_file'
 
 # Initialize YOLOv5 model
 model_path = 'yolov5s.pt'  # Path to your YOLOv5 model weights
@@ -106,41 +102,18 @@ def identify_objects(objects):
 
     return descriptions
 
-# Function to extract text from objects using OCR
-def extract_text_from_objects(objects):
-    text_data = []
-    for obj in objects:
-        try:
-            image = Image.open(obj['filename'])
-            text = pytesseract.image_to_string(image)
-            text_data.append({
-                'object_id': obj['object_id'],
-                'text': text
-            })
-            logging.info(f"Text extracted for object {obj['object_id']}: {text}")
-        except Exception as e:
-            logging.error(f"Error extracting text from object {obj['object_id']}: {e}")
-            text_data.append({
-                'object_id': obj['object_id'],
-                'text': "OCR failed"
-            })
-
-    return text_data
-
 # Function to summarize attributes of the objects
-def summarize_attributes(objects, descriptions, text_data):
+def summarize_attributes(objects, descriptions):
     summary = []
     for obj in objects:
         description = next((item['description'] for item in descriptions if item['object_id'] == obj['object_id']), None)
-        text = next((item['text'] for item in text_data if item['object_id'] == obj['object_id']), None)
 
         summary.append({
             'object_id': obj['object_id'],
             'bounding_box': obj['bounding_box'],
             'confidence': obj['confidence'],
             'class_id': obj['class_id'],
-            'description': description,
-            'text': text
+            'description': description
         })
 
     return summary
@@ -185,12 +158,10 @@ def run_pipeline(image_path):
             objects = objects_future.result()
 
             descriptions_future = executor.submit(identify_objects, objects)
-            text_data_future = executor.submit(extract_text_from_objects, objects)
 
             descriptions = descriptions_future.result()
-            text_data = text_data_future.result()
 
-        summary = summarize_attributes(objects, descriptions, text_data)
+        summary = summarize_attributes(objects, descriptions)
         output_image_path, output_csv_path = generate_output(image_path, summary)
         logging.info("Pipeline completed successfully.")
         return output_image_path, output_csv_path
@@ -200,7 +171,7 @@ def run_pipeline(image_path):
 
 # Streamlit app integration
 def main():
-    st.title("AI Pipeline for Image Segmentation, Object Identification, and Text Extraction")
+    st.title("AI Pipeline for Image Segmentation and Object Identification")
 
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
