@@ -185,40 +185,46 @@ def main():
         st.image(image, caption='Uploaded Image', use_column_width=True)
         st.write("Running the pipeline...")
 
-        # Save the uploaded image to a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-            temp_image_path = temp_file.name
+        try:
+            # Save the uploaded image to a temporary file
+            temp_dir = tempfile.gettempdir()
+            temp_image_path = os.path.join(temp_dir, 'uploaded_image.png')  # Save as PNG
             image.save(temp_image_path)
+            st.write(f"Image successfully saved at: {temp_image_path}")
 
-        # Run the AI pipeline on the uploaded image
-        output_image_path, output_csv_path, segmented_images = run_pipeline(temp_image_path)
+            # Run the AI pipeline on the uploaded image
+            output_image_path, output_csv_path, segmented_images = run_pipeline(temp_image_path)
 
-        # Display results
-        if output_image_path and output_csv_path:
-            st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
+            # Display results
+            if output_image_path and output_csv_path:
+                st.image(output_image_path, caption='Output Image with Annotations', use_column_width=True)
 
-            # Display segmented images with labels
-            st.subheader("Segmented Objects")
-            for seg_img in segmented_images:
-                col1, col2 = st.columns(2)
-                col1.image(seg_img['image_path'], caption=seg_img['description'], use_column_width=True)
-                col2.write(f"**Description**: {seg_img['description']}")
+                # Display segmented images with labels
+                st.subheader("Segmented Objects")
+                for seg_img in segmented_images:
+                    col1, col2 = st.columns(2)
+                    col1.image(seg_img['image_path'], caption=seg_img['description'], use_column_width=True)
+                    col2.write(f"**Description**: {seg_img['description']}")
 
-            # Display CSV summary
-            summary_df = pd.read_csv(output_csv_path)
-            st.write("Summary of Detected Objects:")
-            st.dataframe(summary_df)
+                # Display CSV summary
+                summary_df = pd.read_csv(output_csv_path)
+                st.write("Summary of Detected Objects:")
+                st.dataframe(summary_df)
 
-            # Provide download link for CSV
-            with open(output_csv_path, "rb") as file:
-                st.download_button(
-                    label="Download Summary CSV",
-                    data=file,
-                    file_name="summary.csv",
-                    mime="text/csv"
-                )
-        else:
-            st.write("Error: Output files not found.")
+                # Provide download link for CSV
+                with open(output_csv_path, "rb") as file:
+                    st.download_button(
+                        label="Download Summary CSV",
+                        data=file,
+                        file_name="summary.csv",
+                        mime="text/csv"
+                    )
+            else:
+                st.write("Error: Output files not found.")
+        except OSError as e:
+            st.error(f"Failed to save the image: {e}")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
 if __name__ == "__main__":
     main()
