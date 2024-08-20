@@ -76,6 +76,19 @@ The app logs its activity at the `INFO` level. If you encounter issues, check th
 - **Additional Models**: Add support for other object detection and captioning models.
 - **Customization**: Allow users to adjust model parameters directly from the app.
 
+## Videos
+### Note for Making Three Different Videos
+### Video 1: Code Explanation
+Provide a detailed explanation of the code.
+https://www.loom.com/share/3c1f13d450a44ba782e37a7cd6f0966b?sid=b633f32e-3312-4214-a5bb-5b43927bf72c
+### Video 2: Code Explanation and Execution
+Explain the code and demonstrate how it is executed.
+https://www.loom.com/share/89bcf23c576f473f86f254ee0effbfd0?sid=02d51443-5c3a-4e53-9792-89bc5b6c91a7
+### Video 3: Execution and Results
+Show the execution of the code and discuss the results.
+https://www.loom.com/share/8c7bff9a6f934f188c0bbfb44e6c1202
+
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
