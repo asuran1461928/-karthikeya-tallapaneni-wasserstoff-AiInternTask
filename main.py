@@ -7,6 +7,9 @@ from PIL import Image, ImageDraw, ImageFont
 from yolov5 import YOLOv5
 from transformers import BlipProcessor, BlipForConditionalGeneration
 import torch
+from basicsr.archs.rrdbnet_arch import RRDBNet
+from basicsr.utils.download_util import load_file_from_url
+from realesrgan import RealESRGANer
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +21,20 @@ yolov5_model = YOLOv5(model_path, device='cpu')  # Use 'cpu' or 'cuda'
 # Initialize BLIP processor and model for auto-captioning
 caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 caption_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to('cpu')
+
+# Load the ESRGAN model
+def load_esrgan_model():
+    model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+    model_path = 'RealESRGAN_x4plus.pth'  # You need to download this model
+    file_url = 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.3.0/RealESRGAN_x4plus.pth'
+    model_path = load_file_from_url(url=file_url, model_dir='.', progress=True)
+    return RealESRGANer(scale=4, model_path=model_path, model=model, tile=256, tile_pad=10, pre_pad=0, half=False)
+
+# Apply super-resolution using ESRGAN
+def apply_esrgan(image):
+    esrgan = load_esrgan_model()
+    sr_image, _ = esrgan.enhance(image, outscale=4)
+    return sr_image
 
 # Function to generate captions using BLIP
 def generate_caption(image):
@@ -40,6 +57,9 @@ def segment_image(image_path):
     try:
         # Open the image and convert to RGB
         image = Image.open(image_path).convert("RGB")
+
+        # Apply super-resolution
+        image = apply_esrgan(image)
 
         # Resize the image using Nearest-Neighbor interpolation
         original_size = image.size
@@ -188,7 +208,7 @@ def run_pipeline(image_path):
 
 # Streamlit app integration
 def main():
-    st.title("AI Pipeline for Image Segmentation and Object Identification")
+    st.title("AI Pipeline for Image Segmentation and Object Identification with Super-Resolution")
 
     # Upload image
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
