@@ -156,7 +156,7 @@ def generate_output(image_path, summary):
 
     return output_image_path, output_csv_path, segmented_images
 
-# Function to execute the full pipeline
+# Function to execute the full pipeline with parallel processing
 def run_pipeline(image_path):
     try:
         boxes, image = segment_image(image_path)
