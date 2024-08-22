@@ -1,5 +1,5 @@
 torch
-opencv-python-headless
+opencv-python
 numpy
 Pillow
 pytesseract
