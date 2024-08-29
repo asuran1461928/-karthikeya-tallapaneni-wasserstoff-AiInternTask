@@ -1,5 +1,5 @@
 torch
-opencv-python
+opencv
 numpy
 Pillow
 pytesseract
