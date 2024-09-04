@@ -1,7 +1,6 @@
 torch
 numpy
 OpenCV-python
-cv2
 Pillow
 pytesseract
 transformers
