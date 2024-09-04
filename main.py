@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import cv2
 import pandas as pd
 import tempfile
 import logging
